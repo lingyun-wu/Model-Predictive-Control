@@ -22,7 +22,8 @@ double dt = 0.1;
 const double Lf = 2.67;
 
 // Reference velocity
-const double ref_v = 60;
+const double ref_v_max = 100;
+const double ref_v_min = 40;
 
 // Indices of variables in the "vars" vector 
 size_t x_start = 0;
@@ -39,7 +40,11 @@ class FG_eval {
  public:
   // Fitted polynomial coefficients
   Eigen::VectorXd coeffs;
-  FG_eval(Eigen::VectorXd coeffs) { this->coeffs = coeffs; }
+  double ref_v;
+  FG_eval(Eigen::VectorXd coeffs, double ref_v) { 
+	  this->coeffs = coeffs; 
+  	  this->ref_v = ref_v;
+  }
 
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
   void operator()(ADvector& fg, const ADvector& vars) {
@@ -125,8 +130,6 @@ class FG_eval {
       fg[1 + cte_start + t] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
       fg[1 + epsi_start + t] = epsi1 - ((psi0 - psides0) + v0 * delta0 / Lf * dt);
     }
-
-	
   }
 };
 
@@ -227,8 +230,23 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   constraints_upperbound[cte_start] = cte;
   constraints_upperbound[epsi_start] = epsi;
 
+	
+  double ref_v = 0;	
+  double curvature_sum = 0;
+  double curvature_max;
+  double curvature_min;
+	
+  for (int i = 1; i < 5; ++i) {
+    double x_cur = x + v * i * dt;
+    curvature_sum += abs(2 * coeffs[2] + 6 * coeffs[3] * x_cur) / pow(1+pow(coeffs[1] + 2 * coeffs[2] * x_cur + 3 * coeffs[3] * pow(x_cur, 2), 2), 1.5);
+  }
+
+  if (curvature_sum < curvature_min) {
+    ref_v = ref_v_max;
+  } else if
+	
   // object that computes objective and constraints
-  FG_eval fg_eval(coeffs);
+  FG_eval fg_eval(coeffs, ref_v);
 
   //
   // NOTE: You don't have to worry about these options
