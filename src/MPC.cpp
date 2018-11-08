@@ -6,8 +6,8 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 12;
-double dt = 0.05;
+size_t N = 11;
+double dt = 0.1;
 
 // This value assumes the model presented in the classroom is used.
 //
@@ -21,8 +21,10 @@ double dt = 0.05;
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
 
-const double ref_v = 100.0;
+// Reference velocity
+const double ref_v = 60;
 
+// Indices of variables in the "vars" vector 
 size_t x_start = 0;
 size_t y_start = x_start + N;
 size_t psi_start = y_start + N;
@@ -52,14 +54,16 @@ class FG_eval {
 	  fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
 	}
 
+    // delta and a
 	for (size_t t = 0; t < N-1; ++t) {
 	  fg[0] += CppAD::pow(vars[delta_start+t], 2);
-	  fg[0] += 10 * CppAD::pow(vars[a_start+t], 2);
+	  fg[0] += CppAD::pow(vars[a_start+t], 2);
 	}	
 
+    // differences between sequential delta and a
 	for (size_t t = 0; t < N-2; ++t) {
-	  fg[0] += 600 * CppAD::pow(vars[delta_start+t+1] - vars[delta_start+t], 2);
-	  fg[0] += CppAD::pow(vars[a_start+t+1] - vars[a_start+t], 2);
+	  fg[0] += 500 * CppAD::pow(vars[delta_start+t+1] - vars[delta_start+t], 2);
+	  fg[0] += 10 * CppAD::pow(vars[a_start+t+1] - vars[a_start+t], 2);
 	}
 
 	
@@ -129,13 +133,19 @@ class FG_eval {
 //
 // MPC class definition implementation.
 //
-MPC::MPC() {}
+// Constructor: set up previous delta and a
+MPC::MPC() {
+  pre_delta = 0;
+  pre_a = 0.5;
+}
+
 MPC::~MPC() {}
 
 vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   bool ok = true;
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
+  // Initial state
   double x = state[0];
   double y = state[1];
   double psi = state[2];
@@ -181,10 +191,18 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     vars_upperbound[i] = 0.436332;
   }
 
+  // Previous delta, because of latency
+  vars_lowerbound[delta_start] = pre_delta;
+  vars_upperbound[delta_start] = pre_delta;
+
   for (size_t i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 1.0;
   }
+
+  // Previous a, because of latency
+  vars_lowerbound[a_start] = pre_a;
+  vars_upperbound[a_start] = pre_a;
 
   // Lower and upper limits for the constraints
   // Should be 0 besides initial state.
@@ -250,5 +268,22 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   //
   // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
   // creates a 2 element double vector.
-  return {solution.x[delta_start], solution.x[a_start], solution.x[x_start + 1], solution.x[y_start + 1], solution.x[psi_start + 1], solution.x[v_start + 1], solution.x[cte_start + 1], solution.x[epsi_start + 1]};
+
+  // Output results vector
+  vector<double> res;
+  // Because of 100ms latency, use the second predicted state as input
+  res.push_back(solution.x[delta_start+1]);
+  res.push_back(solution.x[a_start+1]);
+  
+  // Store the actuation as previous one
+  pre_delta = res[0];
+  pre_a = res[1];
+
+  // Predicted trajectory
+  for (int i = 0; i < N; ++i) {
+    res.push_back(solution.x[x_start+i]);
+    res.push_back(solution.x[y_start+i]);
+  }
+  
+  return res;
 }
