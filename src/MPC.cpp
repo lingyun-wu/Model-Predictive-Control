@@ -61,14 +61,14 @@ class FG_eval {
 
     // delta and a
 	for (size_t t = 0; t < N-1; ++t) {
-	  fg[0] += 10 * CppAD::pow(vars[delta_start+t], 2);
+	  fg[0] += 100 * CppAD::pow(vars[delta_start+t], 2);
 	  fg[0] += CppAD::pow(vars[a_start+t], 2);
 	}	
 
     // differences between sequential delta and a
 	for (size_t t = 0; t < N-2; ++t) {
 	  fg[0] += 800 * CppAD::pow(vars[delta_start+t+1] - vars[delta_start+t], 2);
-	  fg[0] += 100 * CppAD::pow(vars[a_start+t+1] - vars[a_start+t], 2);
+	  fg[0] += 50 * CppAD::pow(vars[a_start+t+1] - vars[a_start+t], 2);
 	}
 
 	
@@ -234,17 +234,18 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   constraints_upperbound[cte_start] = cte;
   constraints_upperbound[epsi_start] = epsi;
 
-	
+  // Reference velocity calculation	
   double ref_v = 60;
-  double curvature_sum = 0;
-  double curvature_max = 0.14;
-  double curvature_min = 0.003;
+  double curvature_sum = 0;      // curvature sum of four points
+  double curvature_max = 0.14;   // maximum curvature sum
+  double curvature_min = 0.003;  // minimum curvature sum
 	
   for (int i = 3; i < 7; ++i) {
     double x_cur = x + v * i * dt;
     curvature_sum += abs(2 * coeffs[2] + 6 * coeffs[3] * x_cur) / pow(1+pow(coeffs[1] + 2 * coeffs[2] * x_cur + 3 * coeffs[3] * pow(x_cur, 2), 2), 1.5);
   }
 
+  // Three conditions to get the reference velocity
   if (curvature_sum < curvature_min) {
     ref_v = ref_v_max;
   } else if (curvature_sum > curvature_max) {
