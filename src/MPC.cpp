@@ -6,8 +6,8 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 12;
-double dt = 0.05;
+size_t N = 10;
+double dt = 0.11;
 
 // This value assumes the model presented in the classroom is used.
 //
@@ -22,8 +22,8 @@ double dt = 0.05;
 const double Lf = 2.67;
 
 // Reference velocity
-const double ref_v_max = 75;
-const double ref_v_min = 55;
+const double ref_v_max = 55;
+const double ref_v_min = 25;
 
 // Indices of variables in the "vars" vector 
 size_t x_start = 0;
@@ -54,21 +54,21 @@ class FG_eval {
     // the Solver function below.
     fg[0] = 0;
     for (size_t t = 0; t < N; ++t) {
-	  fg[0] += CppAD::pow(vars[cte_start + t], 2);
+	  fg[0] += 0.08 * CppAD::pow(vars[cte_start + t], 2);
 	  fg[0] += CppAD::pow(vars[epsi_start + t], 2);
 	  fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
 	}
 
     // delta and a
 	for (size_t t = 0; t < N-1; ++t) {
-	  fg[0] += 100 * CppAD::pow(vars[delta_start+t], 2);
+	  fg[0] += 80 * CppAD::pow(vars[delta_start+t], 2);
 	  fg[0] += CppAD::pow(vars[a_start+t], 2);
 	}	
 
     // differences between sequential delta and a
 	for (size_t t = 0; t < N-2; ++t) {
-	  fg[0] += 800 * CppAD::pow(vars[delta_start+t+1] - vars[delta_start+t], 2);
-	  fg[0] += 50 * CppAD::pow(vars[a_start+t+1] - vars[a_start+t], 2);
+	  fg[0] += 3000 * CppAD::pow(vars[delta_start+t+1] - vars[delta_start+t], 2);
+	  fg[0] += CppAD::pow(vars[a_start+t+1] - vars[a_start+t], 2);
 	}
 
 	
@@ -137,10 +137,7 @@ class FG_eval {
 // MPC class definition implementation.
 //
 // Constructor: set up previous delta and a
-MPC::MPC() {
-  pre_delta = 0;
-  pre_a = 0.5;
-}
+MPC::MPC() {}
 
 MPC::~MPC() {}
 
@@ -194,22 +191,12 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     vars_upperbound[i] = 0.436332;
   }
 
-  // Previous delta, because of latency
-  vars_lowerbound[delta_start] = pre_delta;
-  vars_upperbound[delta_start] = pre_delta;
-  vars_lowerbound[delta_start+1] = pre_delta;
-  vars_upperbound[delta_start+1] = pre_delta;
 
   for (size_t i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 1.0;
   }
 
-  // Previous a, because of latency
-  vars_lowerbound[a_start] = pre_a;
-  vars_upperbound[a_start] = pre_a;
-  vars_lowerbound[a_start+1] = pre_a;
-  vars_upperbound[a_start+1] = pre_a;
 
   // Lower and upper limits for the constraints
   // Should be 0 besides initial state.
@@ -235,12 +222,13 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   constraints_upperbound[epsi_start] = epsi;
 
   // Reference velocity calculation	
-  double ref_v = 60;
+  double ref_v = 20;
+  
   double curvature_sum = 0;      // curvature sum of four points
-  double curvature_max = 0.14;   // maximum curvature sum
-  double curvature_min = 0.003;  // minimum curvature sum
+  double curvature_max = 0.12;   // maximum curvature sum
+  double curvature_min = 0.005;  // minimum curvature sum
 	
-  for (int i = 3; i < 7; ++i) {
+  for (int i = 1; i < 5; ++i) {
     double x_cur = x + v * i * dt;
     curvature_sum += abs(2 * coeffs[2] + 6 * coeffs[3] * x_cur) / pow(1+pow(coeffs[1] + 2 * coeffs[2] * x_cur + 3 * coeffs[3] * pow(x_cur, 2), 2), 1.5);
   }
@@ -302,12 +290,9 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // Output results vector
   vector<double> res;
   // Because of 100ms latency, use the second predicted state as input
-  res.push_back(solution.x[delta_start+2]);
-  res.push_back(solution.x[a_start+2]);
+  res.push_back(solution.x[delta_start]);
+  res.push_back(solution.x[a_start]);
   
-  // Store the actuation as previous one
-  pre_delta = res[0];
-  pre_a = res[1];
 
   // Predicted trajectory
   for (int i = 0; i < N; ++i) {

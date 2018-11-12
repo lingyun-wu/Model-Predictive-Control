@@ -6,7 +6,10 @@ Self-Driving Car Engineer Nanodegree Program
 
 ## Project Overview
 
-In this project, the model predictive control technique is implemented to drive the car around the track in the Udacity simulator. The simulator provides the car's position, direction, and reference track trajectory.
+In this project, the model predictive control technique is implemented to drive the car around the track in the Udacity simulator. The simulator provides the car's position, direction, and reference track trajectory. 
+
+[Video of the whole track](https://www.youtube.com/watch?v=fOTDIdAGvVc)
+
 
 <p align="center">
   <img width="370" height="300" src="./images/simulation1.gif">
@@ -35,34 +38,37 @@ The vehicle modle in this project is kinematic model, which has 4 elements in ea
 ### MPC Preprocessing
 
 In the MPC preprocessing, all waypoints provided by the simulator are transformed to the vehicle's coordinate system. Then a reference track trajectory is built based on the polynomial fitting of transformed waypoints. The inital input of each prediction step is
+
 ```
-  x0 = 0
-  y0 = 0
-  psi0 = 0
-  v0 = current velocity
-  cte0 = coeffs[0]
-  epsi0 = -atan(coeffs[1])
+x0 = 0
+y0 = 0
+psi0 = 0
+v0 = current velocity
+cte0 = coeffs[0]
+epsi0 = -atan(coeffs[1])
 ```
 `coeffs` is the coefficient array of fitted polynomial equation.
 
 
 ### Model Predictive Control with Latency
 
-The latency of 100 ms is introduced in the project to simulate the actuation command delay in the real world. This means that the signal received by the vehicle is actually the one happened 100ms ago. Therefore, in the prediction, the result which is 100ms after the current time point is actually the signal we want to apply to the vehicle.
+The latency of 100 ms is introduced in the project to simulate the actuation command delay in the real world. This means that the control signal received by the vehicle is actually the one which is sent 100ms ago. Therefore, we can predict the state after 100ms by using the vehicle model equations and use it as the input into the solver function. The actuation result from the solver function can be taken as the predicted control signal for the vehile after 100ms. 
 
-Here are the procedures:
-
-1. Set up the number of latency time steps to meet the latency requirement, eg. `dt = 0.05ms, number of extra time steps = 2.`
-2. Use the previous actuations as constraints in the extra time steps.
-3. After the prediction simulation, use the results after latency time steps as the actuation output.
-
+```
+x0 = v * cos(psi0) * latency_time;
+y0 = v * sin(psi0) * latency_time;
+psi0 = v * delta / Lf * latency_time;
+v = v + a * latency_time;
+cte0 = cte0 + v * sin(epsi0) * latency_time;
+epsi0 = epsi0 + v * delta / Lf * latency_time;
+```
 
 ### Timestep Length and Reference Velocity
 
 The time `T = N * dt` is the prediction horizon. The length of `T` depends on the speed of the vehicle in the simulator. If the speed `v` of the car is very fast, then we need to have a relatively small `T`, since a very large `T` can make the predicted track trajectory (`T*v`) longer than the input reference track trajectory, which can results in bad control signals. 
-Here I set `N = 12` and `dt = 0.05s`. Because of the latency of 100ms, the `N` can be separated to two parts, `2` for the 100ms delay time and `10` for the prediction after delay. 
+Here I set `N = 10` and `dt = 0.11s`. 
 
-The reference velocity is in the range of [55mpg, 75mpg], and it is determined by the curvature of the vehicle's position in the track. In the program, the curvature sum of four points which are car's current and closest future positions are calculated. Then the curvature sum is compared with a minimum and a maximum curvature sum value to determine the value of reference velocity.
+The reference velocity is in the range of [25mps, 55mps], and it is determined by the curvature of the vehicle's position in the track. In the program, the curvature sum of four points which are car's current and closest future positions are calculated. Then the curvature sum is compared with a minimum and a maximum curvature sum value to determine the value of reference velocity.
 
 If the curvature sum is smaller than the given minimum value `curvature_min`, the reference velocity can be set to its maximum value `ref_v_max`.
 ```

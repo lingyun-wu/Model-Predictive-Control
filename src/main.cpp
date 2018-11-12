@@ -94,7 +94,7 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
-
+          v = v * 0.44704;
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
@@ -117,13 +117,28 @@ int main() {
           // Fit polynomial to the points in 3rd order.
           auto coeffs = polyfit(ptsx_trans, ptsy_trans, 3);
 
+          // Constants for solving latency problem 
+          double Lf = 2.67;
+          double delta = j[1]["steering_angle"];
+          delta *= -deg2rad(25);
+          double a = j[1]["throttle"];
+          double delay = 0.1;
 
           // Initial state.
-          const double x0 = 0;
-          const double y0 = 0;
-          const double psi0 = 0;
-          const double cte0 = coeffs[0];
-          const double epsi0 = -atan(coeffs[1]);
+          double x0 = 0;
+          double y0 = 0;
+          double psi0 = 0;
+          double cte0 = coeffs[0];
+          double epsi0 = -atan(coeffs[1]);
+
+          // Latency solution
+          // Predicted state after 100ms 
+          x0 = v * cos(psi0) * delay;
+          y0 = v * sin(psi0) * delay;
+          psi0 = v * delta / Lf * delay;
+          v = v + a * delay;
+          cte0 = cte0 + v * sin(epsi0) * delay;
+          epsi0 = epsi0 + v * delta / Lf * delay;
           
           // Define the state vector.
           Eigen::VectorXd state(6);
